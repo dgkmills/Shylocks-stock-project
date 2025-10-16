@@ -6,6 +6,7 @@
     <title>Live Stock Tracker - Shyloctz</title>
     <!-- Load Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="manifest" href="/manifest.json">
     <style>
         /* Custom styles for dark theme and typography */
         body {
@@ -63,63 +64,49 @@
 
         <!-- Stock List -->
         <div id="stock-list" class="space-y-3">
-            <!-- Items are generated here -->
             <div id="loading" class="text-center text-gray-500 py-8">
                 <svg class="animate-spin h-5 w-5 mr-3 inline-block text-indigo-400" viewBox="0 0 24 24">
                     <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
                     <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                 </svg>
-                Fetching initial prices...
+                Fetching live prices...
             </div>
         </div>
         
         <!-- Instructions / Footer -->
         <p class="text-xs text-gray-600 mt-6 text-center">
-            *Prices are simulated and update every 60 seconds.
+            Prices update every 60 seconds using a Serverless Function.
         </p>
     </div>
 
     <script>
-        // --- Mock Data Simulation (Replaces API Call in Live Deployment) ---
         const TICKERS = ["AMZN", "AAPL", "NVDA", "TSLA", "GOOG", "META"];
-        const INITIAL_PRICES = {
-            "AMZN": 170.50, "AAPL": 185.20, "NVDA": 183.73, 
-            "TSLA": 250.80, "GOOG": 150.15, "META": 350.90
-        };
-
-        const priceData = {...INITIAL_PRICES};
         const prevPrices = {};
-
-        // Generates a mock price change to simulate market movement
-        function generateMockPrices() {
-            const newPrices = {};
-            for (const ticker of TICKERS) {
-                // Store current price as previous price for comparison
-                prevPrices[ticker] = priceData[ticker];
-                
-                // Simulate fluctuation: +/- 0.5% change
-                const fluctuation = (Math.random() - 0.5) * 0.01; // +/- 0.005
-                const change = priceData[ticker] * fluctuation;
-                
-                // Apply the new price, ensuring it stays above a realistic floor
-                newPrices[ticker] = Math.max(1.00, priceData[ticker] + change); 
-            }
-            Object.assign(priceData, newPrices);
-        }
         
-        // --- Core Application Logic ---
-
-        // Function that would call the Netlify Function in the live environment
+        // Function that calls the deployed Netlify Function
         async function fetchStockPrices() {
-            // In a real deployed app, this would call:
-            // const response = await fetch('/.netlify/functions/get-stock-prices');
-            // const realData = await response.json();
-            
-            // For this Canvas preview, we use the mock data function instead:
-            generateMockPrices();
-            const realData = priceData; 
-
-            updateUI(realData);
+            try {
+                // This is the URL of your Netlify Function
+                const response = await fetch('/.netlify/functions/get-stock-prices');
+                const data = await response.json();
+                
+                if (response.status === 200 && data && Object.keys(data).length > 0) {
+                    updateUI(data);
+                } else if (response.status === 200 && Object.keys(data).length === 0) {
+                    // This often means the API call failed (e.g., rate limit hit or market closed) but the function ran.
+                    document.getElementById('loading').textContent = 'Market may be closed, retrying in 60s.';
+                    document.getElementById('loading').classList.remove('hidden');
+                }
+                 else {
+                    console.error('API Error:', data.error || 'Unknown error');
+                    document.getElementById('loading').textContent = 'Error fetching data. Check Netlify logs.';
+                    document.getElementById('loading').classList.remove('hidden');
+                }
+            } catch (error) {
+                console.error('Network Error:', error);
+                document.getElementById('loading').textContent = 'Network or Function Error. Check console.';
+                document.getElementById('loading').classList.remove('hidden');
+            }
         }
         
         function updateUI(data) {
@@ -127,58 +114,68 @@
             const loading = document.getElementById('loading');
             const now = new Date();
             
-            // Remove loading indicator after first fetch
-            if (loading) {
-                loading.remove();
-                listContainer.innerHTML = ''; // Clear for initial build
+            // Ensure loading indicator is hidden and content is ready to show
+            if (loading && loading.parentNode) {
+                loading.classList.add('hidden');
+                // Only clear the list if we are initializing it for the first time
+                if (listContainer.children.length === 1 && listContainer.children[0].id === 'loading') {
+                    listContainer.innerHTML = ''; 
+                }
             }
 
             // Update Last Updated time
             document.getElementById('last-updated').textContent = now.toLocaleTimeString();
 
-            for (const ticker of TICKERS) {
-                const price = data[ticker];
-                const prevPrice = prevPrices[ticker] || price; // Use current price if no prev price
-                
-                // Determine price direction and apply class
-                let priceClass = '';
-                if (price > prevPrice) {
-                    priceClass = 'price-up';
-                } else if (price < prevPrice) {
-                    priceClass = 'price-down';
-                }
-
-                // Format price with 2 decimal places
-                const priceText = `$${price.toFixed(2)}`;
-
-                let itemElement = document.getElementById(`stock-${ticker}`);
-
-                if (!itemElement) {
-                    // Create the element if it doesn't exist (initial render)
-                    itemElement = document.createElement('div');
+            // Check if stock list needs to be built (for initial load)
+            if (listContainer.children.length === 0) {
+                TICKERS.forEach(ticker => {
+                    const itemElement = document.createElement('div');
                     itemElement.id = `stock-${ticker}`;
                     itemElement.className = 'stock-item flex justify-between items-center p-3 rounded-lg hover:bg-gray-800 transition-colors duration-200';
                     itemElement.innerHTML = `
                         <span class="font-semibold text-lg">${ticker}</span>
-                        <span id="price-${ticker}" class="text-xl font-mono">${priceText}</span>
+                        <span id="price-${ticker}" class="text-xl font-mono">$--</span>
                     `;
                     listContainer.appendChild(itemElement);
-                } else {
-                    // Update the price and apply the animation class for existing elements
-                    const priceSpan = document.getElementById(`price-${ticker}`);
+                });
+            }
+
+            // Update all prices
+            TICKERS.forEach(ticker => {
+                const price = data[ticker];
+                const prevPrice = prevPrices[ticker];
+                
+                let priceClass = '';
+                if (price !== undefined && prevPrice !== undefined) {
+                    if (price > prevPrice) {
+                        priceClass = 'price-up';
+                    } else if (price < prevPrice) {
+                        priceClass = 'price-down';
+                    }
+                }
+                
+                const priceText = price !== undefined ? `$${price.toFixed(2)}` : '$--';
+                const itemElement = document.getElementById(`stock-${ticker}`);
+                const priceSpan = document.getElementById(`price-${ticker}`);
+                
+                if (priceSpan) {
                     priceSpan.textContent = priceText;
-                    
-                    // Apply animation class temporarily
+                }
+                
+                // Apply animation class temporarily
+                if (itemElement) {
                     itemElement.classList.remove('price-up', 'price-down');
                     if (priceClass) {
                         itemElement.classList.add(priceClass);
-                        // Remove the class after the animation duration (0.5s)
                         setTimeout(() => {
                             itemElement.classList.remove(priceClass);
                         }, 500);
                     }
                 }
-            }
+                
+                // Update previous price map for next cycle
+                prevPrices[ticker] = price;
+            });
         }
         
         // Run immediately on load
@@ -187,7 +184,7 @@
         // Set interval for 60 seconds (60,000 milliseconds)
         setInterval(fetchStockPrices, 60000);
 
-        // --- PWA Service Worker Registration (Standard Practice) ---
+        // --- PWA Service Worker Registration ---
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', () => {
                 navigator.serviceWorker.register('/service-worker.js').then(registration => {
@@ -201,4 +198,3 @@
     </script>
 </body>
 </html>
-
