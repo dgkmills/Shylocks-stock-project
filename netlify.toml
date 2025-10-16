@@ -1,0 +1,1 @@
+[build]This tells Netlify where to find your serverless functionsfunctions = "netlify/functions"[[headers]]for = "/*"[headers.values]# Important security and caching headersCache-Control = "no-cache, no-store, must-revalidate"X-Content-Type-Options = "nosniff"X-Frame-Options = "DENY"Referrer-Policy = "strict-origin-when-cross-origin"
