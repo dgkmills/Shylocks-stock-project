@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Live Stock Tracker - Shyloctz</title>
+    <!-- Load Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* Custom styles for dark theme and typography */
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #0d1117; /* Dark background */
+            color: #c9d1d9; /* Light text */
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: flex-start;
+            padding: 1rem;
+        }
+        #app-container {
+            max-width: 400px;
+            width: 100%;
+            padding: 1.5rem;
+            margin-top: 2rem;
+            background-color: #161b22; /* Slightly lighter card background */
+            border-radius: 12px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.5), 0 10px 20px rgba(0, 0, 0, 0.8);
+        }
+        .stock-item {
+            transition: background-color 0.3s ease;
+        }
+        /* Style for price change animation */
+        .price-up {
+            color: #34d399; /* Green for positive change */
+            animation: pulse-up 0.5s ease-out;
+        }
+        .price-down {
+            color: #f87171; /* Red for negative change */
+            animation: pulse-down 0.5s ease-out;
+        }
+        @keyframes pulse-up {
+            0% { background-color: rgba(52, 211, 153, 0.2); }
+            100% { background-color: transparent; }
+        }
+        @keyframes pulse-down {
+            0% { background-color: rgba(248, 113, 113, 0.2); }
+            100% { background-color: transparent; }
+        }
+    </style>
+</head>
+<body>
+
+    <div id="app-container">
+        <h1 class="text-3xl font-bold text-center mb-6 text-indigo-400">
+            Stock Price Tracker
+        </h1>
+        
+        <!-- Last Updated Time -->
+        <div class="text-xs text-gray-400 mb-4 text-center">
+            Last updated <span id="last-updated" class="font-mono">--</span>
+        </div>
+
+        <!-- Stock List -->
+        <div id="stock-list" class="space-y-3">
+            <!-- Items are generated here -->
+            <div id="loading" class="text-center text-gray-500 py-8">
+                <svg class="animate-spin h-5 w-5 mr-3 inline-block text-indigo-400" viewBox="0 0 24 24">
+                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+                Fetching initial prices...
+            </div>
+        </div>
+        
+        <!-- Instructions / Footer -->
+        <p class="text-xs text-gray-600 mt-6 text-center">
+            *Prices are simulated and update every 60 seconds.
+        </p>
+    </div>
+
+    <script>
+        // --- Mock Data Simulation (Replaces API Call in Live Deployment) ---
+        const TICKERS = ["AMZN", "AAPL", "NVDA", "TSLA", "GOOG", "META"];
+        const INITIAL_PRICES = {
+            "AMZN": 170.50, "AAPL": 185.20, "NVDA": 183.73, 
+            "TSLA": 250.80, "GOOG": 150.15, "META": 350.90
+        };
+
+        const priceData = {...INITIAL_PRICES};
+        const prevPrices = {};
+
+        // Generates a mock price change to simulate market movement
+        function generateMockPrices() {
+            const newPrices = {};
+            for (const ticker of TICKERS) {
+                // Store current price as previous price for comparison
+                prevPrices[ticker] = priceData[ticker];
+                
+                // Simulate fluctuation: +/- 0.5% change
+                const fluctuation = (Math.random() - 0.5) * 0.01; // +/- 0.005
+                const change = priceData[ticker] * fluctuation;
+                
+                // Apply the new price, ensuring it stays above a realistic floor
+                newPrices[ticker] = Math.max(1.00, priceData[ticker] + change); 
+            }
+            Object.assign(priceData, newPrices);
+        }
+        
+        // --- Core Application Logic ---
+
+        // Function that would call the Netlify Function in the live environment
+        async function fetchStockPrices() {
+            // In a real deployed app, this would call:
+            // const response = await fetch('/.netlify/functions/get-stock-prices');
+            // const realData = await response.json();
+            
+            // For this Canvas preview, we use the mock data function instead:
+            generateMockPrices();
+            const realData = priceData; 
+
+            updateUI(realData);
+        }
+        
+        function updateUI(data) {
+            const listContainer = document.getElementById('stock-list');
+            const loading = document.getElementById('loading');
+            const now = new Date();
+            
+            // Remove loading indicator after first fetch
+            if (loading) {
+                loading.remove();
+                listContainer.innerHTML = ''; // Clear for initial build
+            }
+
+            // Update Last Updated time
+            document.getElementById('last-updated').textContent = now.toLocaleTimeString();
+
+            for (const ticker of TICKERS) {
+                const price = data[ticker];
+                const prevPrice = prevPrices[ticker] || price; // Use current price if no prev price
+                
+                // Determine price direction and apply class
+                let priceClass = '';
+                if (price > prevPrice) {
+                    priceClass = 'price-up';
+                } else if (price < prevPrice) {
+                    priceClass = 'price-down';
+                }
+
+                // Format price with 2 decimal places
+                const priceText = `$${price.toFixed(2)}`;
+
+                let itemElement = document.getElementById(`stock-${ticker}`);
+
+                if (!itemElement) {
+                    // Create the element if it doesn't exist (initial render)
+                    itemElement = document.createElement('div');
+                    itemElement.id = `stock-${ticker}`;
+                    itemElement.className = 'stock-item flex justify-between items-center p-3 rounded-lg hover:bg-gray-800 transition-colors duration-200';
+                    itemElement.innerHTML = `
+                        <span class="font-semibold text-lg">${ticker}</span>
+                        <span id="price-${ticker}" class="text-xl font-mono">${priceText}</span>
+                    `;
+                    listContainer.appendChild(itemElement);
+                } else {
+                    // Update the price and apply the animation class for existing elements
+                    const priceSpan = document.getElementById(`price-${ticker}`);
+                    priceSpan.textContent = priceText;
+                    
+                    // Apply animation class temporarily
+                    itemElement.classList.remove('price-up', 'price-down');
+                    if (priceClass) {
+                        itemElement.classList.add(priceClass);
+                        // Remove the class after the animation duration (0.5s)
+                        setTimeout(() => {
+                            itemElement.classList.remove(priceClass);
+                        }, 500);
+                    }
+                }
+            }
+        }
+        
+        // Run immediately on load
+        fetchStockPrices();
+
+        // Set interval for 60 seconds (60,000 milliseconds)
+        setInterval(fetchStockPrices, 60000);
+
+        // --- PWA Service Worker Registration (Standard Practice) ---
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('/service-worker.js').then(registration => {
+                    console.log('SW registered: ', registration);
+                }).catch(registrationError => {
+                    console.log('SW registration failed: ', registrationError);
+                });
+            });
+        }
+
+    </script>
+</body>
+</html>
+
